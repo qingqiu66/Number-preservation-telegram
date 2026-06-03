@@ -899,6 +899,268 @@ const HTML_CONTENT = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const TG_SESSION_TTL_SECONDS = 900;
+
+function jsonResponse(data, headers = {}, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers }
+  });
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+async function sendTelegramMessage(tgToken, chatId, text) {
+  if (!tgToken || !chatId) return;
+  const tgUrl = `https://api.telegram.org/bot${tgToken}/sendMessage`;
+  await fetch(tgUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" })
+  });
+}
+
+async function getEsims(env) {
+  const esims = await env.ESIM_DB.get("esim_list", { type: "json" });
+  return Array.isArray(esims) ? esims : [];
+}
+
+async function saveEsims(env, esims) {
+  await env.ESIM_DB.put("esim_list", JSON.stringify(esims));
+}
+
+function getTelegramSessionKey(chatId) {
+  return `tg_session_${chatId}`;
+}
+
+function isValidDateString(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function getTelegramHelpText() {
+  return `🤖 <b>eSIM 保号机器人使用说明</b>
+
+<b>可用命令</b>
+/start - 查看欢迎说明
+/help - 查看完整使用说明
+/list - 查看当前号码列表
+/add - 逐步添加一个新号码
+/cancel - 取消当前未完成的添加流程
+
+<b>添加号码流程</b>
+发送 /add 后，我会按 6 步询问：
+1/6 卡片名称：必填，例如 KnowRoaming
+2/6 手机号：选填，例如 +1 234 567 8900；输入 - 可跳过
+3/6 保号周期：必填，输入大于 0 的整数，例如 180
+4/6 到期日：必填，格式 YYYY-MM-DD，例如 2026-12-31
+5/6 已注册平台：选填，例如 Telegram Google OpenAI；输入 - 可跳过
+6/6 备注/保号要求：选填，例如 半年发一次短信；输入 - 可跳过
+
+最后我会发送汇总。回复 确认 保存，回复 取消 或 /cancel 放弃。`;
+}
+
+function getAddStepPrompt(step) {
+  const prompts = {
+    name: "📝 <b>第 1/6 步：卡片名称</b>\n\n请输入卡片名称，不能为空。\n示例：KnowRoaming\n\n如需取消，请发送 /cancel。",
+    number: "📞 <b>第 2/6 步：手机号</b>\n\n请输入手机号，建议带国际区号。\n示例：+1 234 567 8900\n\n如果不想填写，请输入 - 跳过。",
+    cycle: "🔄 <b>第 3/6 步：保号周期</b>\n\n请输入保号周期天数，必须是大于 0 的整数。\n示例：180\n\n如需取消，请发送 /cancel。",
+    expireDate: "📅 <b>第 4/6 步：到期日</b>\n\n请输入本次到期日，格式必须是 YYYY-MM-DD。\n示例：2026-12-31\n\n如需取消，请发送 /cancel。",
+    platforms: "🌐 <b>第 5/6 步：已注册平台</b>\n\n请输入这个号码已绑定的平台，可用空格或逗号分隔。\n示例：Telegram Google OpenAI\n\n如果不想填写，请输入 - 跳过。",
+    remark: "📝 <b>第 6/6 步：备注/保号要求</b>\n\n请输入备注或保号要求。\n示例：半年发一次短信\n\n如果不想填写，请输入 - 跳过。"
+  };
+  return prompts[step];
+}
+
+function formatSimSummary(data) {
+  return `📱 卡名：${escapeHtml(data.name)}
+📞 号码：${escapeHtml(data.number || "未填写")}
+🔄 周期：${escapeHtml(data.cycle)} 天
+📅 到期：${escapeHtml(data.expireDate)}
+🌐 平台：${escapeHtml(data.platforms || "未填写")}
+📝 备注：${escapeHtml(data.remark || "未填写")}`;
+}
+
+async function saveTelegramSession(env, chatId, session) {
+  await env.ESIM_DB.put(getTelegramSessionKey(chatId), JSON.stringify(session), { expirationTtl: TG_SESSION_TTL_SECONDS });
+}
+
+async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
+  const value = text.trim();
+  const sessionKey = getTelegramSessionKey(chatId);
+
+  if (value === "取消") {
+    await env.ESIM_DB.delete(sessionKey);
+    await sendTelegramMessage(tgToken, chatId, "已取消当前添加流程。如需重新添加，请发送 /add。");
+    return;
+  }
+
+  if (session.step === "name") {
+    if (!value || value === "-") {
+      await sendTelegramMessage(tgToken, chatId, "卡片名称不能为空，请输入名称，例如 KnowRoaming。如需取消，请发送 /cancel。");
+      return;
+    }
+    session.data.name = value;
+    session.step = "number";
+    session.updatedAt = Date.now();
+    await saveTelegramSession(env, chatId, session);
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("number"));
+    return;
+  }
+
+  if (session.step === "number") {
+    session.data.number = value === "-" ? "" : value;
+    session.step = "cycle";
+    session.updatedAt = Date.now();
+    await saveTelegramSession(env, chatId, session);
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("cycle"));
+    return;
+  }
+
+  if (session.step === "cycle") {
+    const cycle = Number(value);
+    if (!Number.isInteger(cycle) || cycle <= 0) {
+      await sendTelegramMessage(tgToken, chatId, "周期格式不正确，请输入大于 0 的整数，例如 180。如需取消，请发送 /cancel。");
+      return;
+    }
+    session.data.cycle = cycle;
+    session.step = "expireDate";
+    session.updatedAt = Date.now();
+    await saveTelegramSession(env, chatId, session);
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("expireDate"));
+    return;
+  }
+
+  if (session.step === "expireDate") {
+    if (!isValidDateString(value)) {
+      await sendTelegramMessage(tgToken, chatId, "日期格式不正确，请使用 YYYY-MM-DD，例如 2026-12-31。如需取消，请发送 /cancel。");
+      return;
+    }
+    session.data.expireDate = value;
+    session.step = "platforms";
+    session.updatedAt = Date.now();
+    await saveTelegramSession(env, chatId, session);
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("platforms"));
+    return;
+  }
+
+  if (session.step === "platforms") {
+    session.data.platforms = value === "-" ? "" : value;
+    session.step = "remark";
+    session.updatedAt = Date.now();
+    await saveTelegramSession(env, chatId, session);
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("remark"));
+    return;
+  }
+
+  if (session.step === "remark") {
+    session.data.remark = value === "-" ? "" : value;
+    session.step = "confirm";
+    session.updatedAt = Date.now();
+    await saveTelegramSession(env, chatId, session);
+    await sendTelegramMessage(tgToken, chatId, `✅ <b>请确认新增号码信息</b>\n\n${formatSimSummary(session.data)}\n\n回复 确认 保存，回复 取消 放弃。`);
+    return;
+  }
+
+  if (session.step === "confirm") {
+    if (value !== "确认") {
+      await sendTelegramMessage(tgToken, chatId, "请回复 确认 保存，或回复 取消 放弃当前添加流程。");
+      return;
+    }
+
+    const esims = await getEsims(env);
+    esims.push({
+      id: Date.now().toString(),
+      name: session.data.name,
+      number: session.data.number || "",
+      cycle: session.data.cycle,
+      expireDate: session.data.expireDate,
+      platforms: session.data.platforms || "",
+      remark: session.data.remark || ""
+    });
+    await saveEsims(env, esims);
+    await env.ESIM_DB.delete(sessionKey);
+    await sendTelegramMessage(tgToken, chatId, `✅ 已保存新号码。\n\n${formatSimSummary(session.data)}`);
+  }
+}
+
+async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders) {
+  let update;
+  try {
+    update = await request.json();
+  } catch (err) {
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  const message = update.message || update.edited_message;
+  const chatId = message && message.chat && message.chat.id ? String(message.chat.id) : "";
+  const text = message && typeof message.text === "string" ? message.text.trim() : "";
+
+  if (!chatId || !text || String(tgChat) !== chatId) {
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (!tgToken || !tgChat) {
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  const command = text.split(/\s+/)[0].split("@")[0].toLowerCase();
+  const sessionKey = getTelegramSessionKey(chatId);
+  const session = await env.ESIM_DB.get(sessionKey, { type: "json" });
+
+  if (command === "/start" || command === "/help") {
+    await sendTelegramMessage(tgToken, chatId, getTelegramHelpText());
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (command === "/cancel" || text === "取消") {
+    await env.ESIM_DB.delete(sessionKey);
+    await sendTelegramMessage(tgToken, chatId, "已取消当前流程。发送 /help 可以查看完整说明。");
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (command === "/list") {
+    const esims = await getEsims(env);
+    if (esims.length === 0) {
+      await sendTelegramMessage(tgToken, chatId, "当前还没有号码记录。发送 /add 可以添加第一个号码。");
+      return jsonResponse({ ok: true }, corsHeaders);
+    }
+    const textList = esims.map((sim, index) => `${index + 1}. ${escapeHtml(sim.name)}\n📞 ${escapeHtml(sim.number || "未填写")}\n📅 ${escapeHtml(sim.expireDate || "未填写")}｜🔄 ${escapeHtml(sim.cycle || "未设置")} 天${sim.platforms ? `\n🌐 ${escapeHtml(sim.platforms)}` : ""}${sim.remark ? `\n📝 ${escapeHtml(sim.remark)}` : ""}`).join("\n\n");
+    await sendTelegramMessage(tgToken, chatId, `📋 <b>当前号码列表</b>\n\n${textList}`);
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (command === "/add") {
+    if (session && session.action === "add") {
+      await sendTelegramMessage(tgToken, chatId, "你已有一个未完成的添加流程。请继续填写，或发送 /cancel 取消后重新开始。");
+      return jsonResponse({ ok: true }, corsHeaders);
+    }
+    const newSession = {
+      action: "add",
+      step: "name",
+      data: { name: "", number: "", cycle: 0, expireDate: "", platforms: "", remark: "" },
+      updatedAt: Date.now()
+    };
+    await saveTelegramSession(env, chatId, newSession);
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("name"));
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (session && session.action === "add") {
+    await handleTelegramAddStep(env, tgToken, chatId, text, session);
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  await sendTelegramMessage(tgToken, chatId, "未识别的命令。发送 /help 查看完整使用说明。");
+  return jsonResponse({ ok: true }, corsHeaders);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -927,6 +1189,10 @@ export default {
       if (!tgToken) tgToken = await env.ESIM_DB.get("TG_BOT_TOKEN");
       if (!tgChat) tgChat = await env.ESIM_DB.get("TG_CHAT_ID");
     } catch (e) {}
+
+    if (path === "/api/telegram/webhook" && request.method === "POST") {
+      return await handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders);
+    }
 
     if (path === "/api/auth/send" && request.method === "POST") {
       try {
