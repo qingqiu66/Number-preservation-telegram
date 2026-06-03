@@ -116,11 +116,10 @@ test("忽略非授权 Telegram chat，不回复也不写入 KV", async () => {
   }
 });
 
-test("/add 完整流程保存记录到 esim_list", async () => {
+test("/add 完整流程保存记录到 esim_list，所有步骤回复常驻导航键盘", async () => {
   const worker = await loadWorker();
-  const env = createEnv({ esim_list: "[]" });
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ ok: true }), { status: 200 });
+  const env = createEnv({ esim_list: "[]", [startKeyboardKey()]: todayString() });
+  const capture = captureTelegramMessages();
 
   try {
     for (const text of [
@@ -147,8 +146,14 @@ test("/add 完整流程保存记录到 esim_list", async () => {
     assert.equal(esims[0].remark, "半年发一次短信");
     assert.ok(esims[0].id);
     assert.equal(env.ESIM_DB.store.has("tg_session_12345"), false);
+
+    const keyboardPayloads = capture.payloads.filter(p => p.reply_markup && p.reply_markup.inline_keyboard);
+    assert.equal(keyboardPayloads.length, 8, "/add 的 8 条回复都应带导航键盘");
+    for (const p of keyboardPayloads) {
+      assert.deepEqual(p.reply_markup.inline_keyboard[0][0], { text: "添加号码", callback_data: "cmd:add" });
+    }
   } finally {
-    globalThis.fetch = originalFetch;
+    capture.restore();
   }
 });
 
@@ -203,6 +208,9 @@ test("/start 返回欢迎说明和添加流程，/help 只返回可用命令", a
     assert.match(capture.messages[1], /<b>可用命令<\/b>/);
     assert.match(capture.messages[1], /\/site - 显示网站访问链接/);
     assert.doesNotMatch(capture.messages[1], /添加号码流程/);
+
+    const startKeyboardPayloads = capture.payloads.filter(p => p.reply_markup && p.reply_markup.inline_keyboard);
+    assert.equal(startKeyboardPayloads.length, 2, "/start 和 /help 回复都应带导航键盘");
     assert.deepEqual(capture.payloads[1].reply_markup.inline_keyboard, [
       [
         { text: "添加号码", callback_data: "cmd:add" },
@@ -254,7 +262,8 @@ test("/help 按钮回调复用现有命令", async () => {
     assert.match(capture.messages[4], /回复序号/);
     assert.match(capture.messages[4], /KnowRoaming/);
 
-    const keyboardPayloads = capture.payloads.filter(p => p.reply_markup);
+    const keyboardPayloads = capture.payloads.filter(p => p.reply_markup && p.reply_markup.inline_keyboard);
+    assert.equal(keyboardPayloads.length, 5, "/list /site /add /help /renew 回调回复都应带导航键盘");
     assert.deepEqual(keyboardPayloads.at(-1).reply_markup.inline_keyboard[1][1], { text: "帮助", callback_data: "cmd:help" });
 
     const session = JSON.parse(env.ESIM_DB.store.get("tg_session_12345"));
@@ -265,7 +274,7 @@ test("/help 按钮回调复用现有命令", async () => {
   }
 });
 
-test("/renew N 一键续期更新 expireDate", async () => {
+test("/renew N 一键续期更新 expireDate，无导航键盘", async () => {
   const worker = await loadWorker();
   const env = createEnv({
     esim_list: JSON.stringify([
@@ -290,12 +299,14 @@ test("/renew N 一键续期更新 expireDate", async () => {
     const expectedStr = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, "0")}-${String(newDate.getDate()).padStart(2, "0")}`;
     assert.equal(esims[0].expireDate, expectedStr);
     assert.match(capture.messages.at(-1), /已续期/);
+    const lastPayload = capture.payloads.at(-1);
+    assert.ok(!lastPayload.reply_markup || !lastPayload.reply_markup.inline_keyboard, "/renew N 续期结果不应带导航键盘");
   } finally {
     capture.restore();
   }
 });
 
-test("/renew 无参数显示号码列表和续期提示", async () => {
+test("/renew 无参数显示号码列表、续期提示和导航键盘", async () => {
   const worker = await loadWorker();
   const env = createEnv({
     esim_list: JSON.stringify([
@@ -311,12 +322,13 @@ test("/renew 无参数显示号码列表和续期提示", async () => {
     assert.match(capture.messages.at(-1), /回复序号直接续期/);
     assert.match(capture.messages.at(-1), /1\. KnowRoaming/);
     assert.match(capture.messages.at(-1), /2\. Firsty/);
+    assert.ok(capture.payloads.at(-1).reply_markup && capture.payloads.at(-1).reply_markup.inline_keyboard, "/renew 无参数回复应带导航键盘");
   } finally {
     capture.restore();
   }
 });
 
-test("/renew 空列表提示没有号码", async () => {
+test("/renew 空列表提示没有号码，带导航键盘", async () => {
   const worker = await loadWorker();
   const env = createEnv({ esim_list: "[]", [startKeyboardKey()]: todayString() });
   const capture = captureTelegramMessages();
@@ -324,12 +336,13 @@ test("/renew 空列表提示没有号码", async () => {
   try {
     await worker.fetch(telegramUpdate("/renew"), env, {});
     assert.match(capture.messages.at(-1), /还没有号码/);
+    assert.ok(capture.payloads.at(-1).reply_markup && capture.payloads.at(-1).reply_markup.inline_keyboard, "/renew 空列表提示应带导航键盘");
   } finally {
     capture.restore();
   }
 });
 
-test("/renew 序号越界提示错误", async () => {
+test("/renew 序号越界提示错误，无导航键盘", async () => {
   const worker = await loadWorker();
   const env = createEnv({
     esim_list: JSON.stringify([
@@ -370,9 +383,9 @@ test("授权用户每天首次交互时只显示一次底部 /start 一次性按
   }
 });
 
-test("/site 返回网站访问链接", async () => {
+test("/site 返回网站访问链接并常驻导航键盘", async () => {
   const worker = await loadWorker();
-  const env = createEnv();
+  const env = createEnv({ [startKeyboardKey()]: todayString() });
   const capture = captureTelegramMessages();
 
   try {
@@ -380,40 +393,36 @@ test("/site 返回网站访问链接", async () => {
 
     assert.equal(response.status, 200);
     assert.match(capture.messages.at(-1), /https:\/\/phone\.betony\.cc\.cd/);
+    assert.ok(capture.payloads.at(-1).reply_markup && capture.payloads.at(-1).reply_markup.inline_keyboard, "/site 回复应带导航键盘");
   } finally {
     capture.restore();
   }
 });
 
-test("周期格式错误时不推进添加步骤", async () => {
+test("/add 流程中周期格式错误时不推进步骤，错误提示带导航键盘", async () => {
   const worker = await loadWorker();
-  const env = createEnv({ esim_list: "[]" });
-  const sentMessages = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url, init) => {
-    sentMessages.push(JSON.parse(init.body).text);
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
-  };
+  const env = createEnv({ esim_list: "[]", [startKeyboardKey()]: todayString() });
+  const capture = captureTelegramMessages();
 
   try {
-    for (const text of ["/add", "KnowRoaming", "-", "abc"]) {
+    for (const text of ["/add", "KnowRoaming", "/skip", "abc"]) {
       const response = await worker.fetch(telegramUpdate(text), env, {});
       assert.equal(response.status, 200);
     }
 
     const session = JSON.parse(env.ESIM_DB.store.get("tg_session_12345"));
     assert.equal(session.step, "cycle");
-    assert.match(sentMessages.at(-1), /周期格式不正确/);
+    assert.match(capture.messages.at(-1), /周期格式不正确/);
+    assert.ok(capture.payloads.at(-1).reply_markup && capture.payloads.at(-1).reply_markup.inline_keyboard, "/add 错误提示应带导航键盘");
   } finally {
-    globalThis.fetch = originalFetch;
+    capture.restore();
   }
 });
 
-test("/cancel 清理当前 Telegram 添加会话", async () => {
+test("/cancel 清理当前 Telegram 添加会话，回复无导航键盘", async () => {
   const worker = await loadWorker();
-  const env = createEnv();
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ ok: true }), { status: 200 });
+  const env = createEnv({ [startKeyboardKey()]: todayString() });
+  const capture = captureTelegramMessages();
 
   try {
     await worker.fetch(telegramUpdate("/add"), env, {});
@@ -423,7 +432,9 @@ test("/cancel 清理当前 Telegram 添加会话", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(env.ESIM_DB.store.has("tg_session_12345"), false);
+    const lastPayload = capture.payloads.at(-1);
+    assert.ok(!lastPayload.reply_markup || !lastPayload.reply_markup.inline_keyboard, "/cancel 回复不应带导航键盘");
   } finally {
-    globalThis.fetch = originalFetch;
+    capture.restore();
   }
 });

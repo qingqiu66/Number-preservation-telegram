@@ -1010,7 +1010,7 @@ function getTelegramHelpText() {
 /cancel - 取消当前未完成流程`;
 }
 
-function getHelpKeyboard() {
+function getMainKeyboard() {
   return {
     inline_keyboard: [
       [
@@ -1100,20 +1100,20 @@ async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
 
   if (value === "取消") {
     await env.ESIM_DB.delete(sessionKey);
-    await sendTelegramMessage(tgToken, chatId, "已取消当前添加流程。如需重新添加，请发送 /add。");
+    await sendTelegramMessage(tgToken, chatId, "已取消当前添加流程。如需重新添加，请发送 /add。", getMainKeyboard());
     return;
   }
 
   if (session.step === "name") {
     if (!value || value === "-") {
-      await sendTelegramMessage(tgToken, chatId, "卡片名称不能为空，请输入名称，例如 KnowRoaming。如需取消，请发送 /cancel。");
+      await sendTelegramMessage(tgToken, chatId, "卡片名称不能为空，请输入名称，例如 KnowRoaming。如需取消，请发送 /cancel。", getMainKeyboard());
       return;
     }
     session.data.name = value;
     session.step = "number";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
-    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("number"));
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("number"), getMainKeyboard());
     return;
   }
 
@@ -1122,34 +1122,34 @@ async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
     session.step = "cycle";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
-    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("cycle"));
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("cycle"), getMainKeyboard());
     return;
   }
 
   if (session.step === "cycle") {
     const cycle = Number(value);
     if (!Number.isInteger(cycle) || cycle <= 0) {
-      await sendTelegramMessage(tgToken, chatId, "周期格式不正确，请输入大于 0 的整数，例如 180。如需取消，请发送 /cancel。");
+      await sendTelegramMessage(tgToken, chatId, "周期格式不正确，请输入大于 0 的整数，例如 180。如需取消，请发送 /cancel。", getMainKeyboard());
       return;
     }
     session.data.cycle = cycle;
     session.step = "expireDate";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
-    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("expireDate"));
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("expireDate"), getMainKeyboard());
     return;
   }
 
   if (session.step === "expireDate") {
     if (!isValidDateString(value)) {
-      await sendTelegramMessage(tgToken, chatId, "日期格式不正确，请使用 YYYY-MM-DD，例如 2026-12-31。如需取消，请发送 /cancel。");
+      await sendTelegramMessage(tgToken, chatId, "日期格式不正确，请使用 YYYY-MM-DD，例如 2026-12-31。如需取消，请发送 /cancel。", getMainKeyboard());
       return;
     }
     session.data.expireDate = value;
     session.step = "platforms";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
-    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("platforms"));
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("platforms"), getMainKeyboard());
     return;
   }
 
@@ -1158,7 +1158,7 @@ async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
     session.step = "remark";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
-    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("remark"));
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("remark"), getMainKeyboard());
     return;
   }
 
@@ -1167,13 +1167,13 @@ async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
     session.step = "confirm";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
-    await sendTelegramMessage(tgToken, chatId, `✅ <b>请确认新增号码信息</b>\n\n${formatSimSummary(session.data)}\n\n回复 确认 保存，回复 取消 放弃。`);
+    await sendTelegramMessage(tgToken, chatId, `✅ <b>请确认新增号码信息</b>\n\n${formatSimSummary(session.data)}\n\n回复 确认 保存，回复 取消 放弃。`, getMainKeyboard());
     return;
   }
 
   if (session.step === "confirm") {
     if (value !== "确认") {
-      await sendTelegramMessage(tgToken, chatId, "请回复 确认 保存，或回复 取消 放弃当前添加流程。");
+      await sendTelegramMessage(tgToken, chatId, "请回复 确认 保存，或回复 取消 放弃当前添加流程。", getMainKeyboard());
       return;
     }
 
@@ -1189,7 +1189,7 @@ async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
     });
     await saveEsims(env, esims);
     await env.ESIM_DB.delete(sessionKey);
-    await sendTelegramMessage(tgToken, chatId, `✅ 已保存新号码。\n\n${formatSimSummary(session.data)}`);
+    await sendTelegramMessage(tgToken, chatId, `✅ 已保存新号码。\n\n${formatSimSummary(session.data)}`, getMainKeyboard());
   }
 }
 
@@ -1228,17 +1228,17 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
   const session = await env.ESIM_DB.get(sessionKey, { type: "json" });
 
   if (command === "/start") {
-    await sendTelegramMessage(tgToken, chatId, getTelegramStartText(), getHelpKeyboard());
+    await sendTelegramMessage(tgToken, chatId, getTelegramStartText(), getMainKeyboard());
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
   if (command === "/help") {
-    await sendTelegramMessage(tgToken, chatId, getTelegramHelpText(), getHelpKeyboard());
+    await sendTelegramMessage(tgToken, chatId, getTelegramHelpText(), getMainKeyboard());
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
   if (command === "/site") {
-    await sendTelegramMessage(tgToken, chatId, getSiteText());
+    await sendTelegramMessage(tgToken, chatId, getSiteText(), getMainKeyboard());
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
@@ -1251,11 +1251,11 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
   if (command === "/list") {
     const esims = await getEsims(env);
     if (esims.length === 0) {
-      await sendTelegramMessage(tgToken, chatId, "当前还没有号码记录。发送 /add 可以添加第一个号码。");
+      await sendTelegramMessage(tgToken, chatId, "当前还没有号码记录。发送 /add 可以添加第一个号码。", getMainKeyboard());
       return jsonResponse({ ok: true }, corsHeaders);
     }
     const textList = esims.map((sim, index) => `${index + 1}. ${escapeHtml(sim.name)}\n📞 ${escapeHtml(sim.number || "未填写")}\n📅 ${escapeHtml(sim.expireDate || "未填写")}｜🔄 ${escapeHtml(sim.cycle || "未设置")} 天${sim.platforms ? `\n🌐 ${escapeHtml(sim.platforms)}` : ""}${sim.remark ? `\n📝 ${escapeHtml(sim.remark)}` : ""}`).join("\n\n");
-    await sendTelegramMessage(tgToken, chatId, `📋 <b>当前号码列表</b>\n\n${textList}`);
+    await sendTelegramMessage(tgToken, chatId, `📋 <b>当前号码列表</b>\n\n${textList}`, getMainKeyboard());
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
@@ -1265,11 +1265,11 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
     const arg = parts[1];
     if (!arg) {
       if (esims.length === 0) {
-        await sendTelegramMessage(tgToken, chatId, "当前还没有号码记录。发送 /add 可以添加第一个号码。");
+        await sendTelegramMessage(tgToken, chatId, "当前还没有号码记录。发送 /add 可以添加第一个号码。", getMainKeyboard());
         return jsonResponse({ ok: true }, corsHeaders);
       }
       const textList = esims.map((sim, index) => `${index + 1}. ${escapeHtml(sim.name)}\n📅 ${escapeHtml(sim.expireDate || "未填写")}｜🔄 ${escapeHtml(sim.cycle || "未设置")} 天`).join("\n\n");
-      await sendTelegramMessage(tgToken, chatId, `📋 <b>选择要续期的号码</b>\n\n${textList}\n\n回复序号直接续期，例如 /renew 1`);
+      await sendTelegramMessage(tgToken, chatId, `📋 <b>选择要续期的号码</b>\n\n${textList}\n\n回复序号直接续期，例如 /renew 1`, getMainKeyboard());
       return jsonResponse({ ok: true }, corsHeaders);
     }
     const index = parseInt(arg, 10) - 1;
@@ -1295,7 +1295,7 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
 
   if (command === "/add") {
     if (session && session.action === "add") {
-      await sendTelegramMessage(tgToken, chatId, "你已有一个未完成的添加流程。请继续填写，或发送 /cancel 取消后重新开始。");
+      await sendTelegramMessage(tgToken, chatId, "你已有一个未完成的添加流程。请继续填写，或发送 /cancel 取消后重新开始。", getMainKeyboard());
       return jsonResponse({ ok: true }, corsHeaders);
     }
     const newSession = {
@@ -1305,7 +1305,7 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
       updatedAt: Date.now()
     };
     await saveTelegramSession(env, chatId, newSession);
-    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("name"));
+    await sendTelegramMessage(tgToken, chatId, getAddStepPrompt("name"), getMainKeyboard());
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
