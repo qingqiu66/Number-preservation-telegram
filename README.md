@@ -351,21 +351,6 @@ Cloudflare API Token 建议使用最小权限：能编辑 Workers，并能读取
 https://esim-api.xxx.workers.dev
 ```
 
-## **🙋‍♂️ 常见问题 / FAQ**
-
-**Q1: 为什么访问网页报错或者显示 404？**  
-检查你的入口点是否设置正确。项目中不存在 index.html，所有的前端代码都已经集成在了 worker/worker.js 中。请确保 Cloudflare 的 Entry point 设置为了 worker/worker.js。如果在 GitHub 库里看到了 wrangler.jsonc 文件，请务必删除它！  
-**Q2: 点击获取验证码，提示“发送失败: 环境缺失”？**  
-这是因为系统没有找到 Telegram 的配置密钥。请返回 Cloudflare 的 KV 数据库 (esim\_db) 的 KV Entries 页面，检查 TG\_BOT\_TOKEN 和 TG\_CHAT\_ID 是否拼写正确、有没有多余的空格。  
-**Q3: 如何绑定自己的自定义域名？**  
-在 Cloudflare Worker 的详情页，进入 Triggers (触发器) \-\> Custom Domains，点击 Add Custom Domain，输入你托管在 CF 的域名即可，自带 HTTPS。  
-**Q4: 我换设备登录了，如何退出？**  
-面板右上角有一个红色的“退出门”图标，点击即可销毁本地凭证，退回安全验证界面。
-**Q5: Telegram 机器人命令没有反应怎么办？**
-先确认你已经设置 Webhook，并且是用 `TG_CHAT_ID` 对应的 Telegram 账号给机器人发消息。机器人会忽略其他 Chat ID 的消息，不会回复。
-**Q6: 如何重新设置 Webhook？**
-重新打开步骤 5 中的 setWebhook 链接即可覆盖旧地址。如果换了 Worker 域名，也需要重新设置。
-
 ## **📜 许可协议 / License**
 
 本项目基于 [MIT License](http://docs.google.com/LICENSE) 开源。您可以自由使用、修改和分发，但请保留原作者信息。如果您觉得好用，请帮忙点个 ⭐ Star！
