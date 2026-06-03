@@ -52,14 +52,80 @@
 2. 点击 **Create a namespace**，命名为 esim\_db，点击添加。  
 3. 创建成功后，复制它旁边长长的一串 **ID**（比如 09fe63fac...）备用。
 
-### **步骤 2：Fork 本仓库并修改配置**
+### **步骤 2：Fork 本仓库并确认 wrangler.toml 占位符**
 
 1. 将本项目 **Fork** 到你自己的 GitHub 账号下。  
-2. 在你 Fork 后的仓库中，找到并编辑 wrangler.toml 文件。  
-3. 将最下方的 id \= "..." 替换为你在**步骤 1 复制的真实 KV 数据库 ID**。  
-4. 点击 Commit changes 保存修改。
+2. 在你 Fork 后的仓库中，打开 wrangler.toml 文件。
+3. 确认最下方的 KV 配置保持占位符形式，不要写死你的真实 KV ID：
 
-### **步骤 3：在 Cloudflare 部署**
+   ```toml
+   [[kv_namespaces]]
+   binding = "ESIM_DB"
+   id = "${KV_ID}"
+   ```
+
+4. 不要把自己的真实 KV ID 提交到代码里。真实 KV ID 后面会放到 GitHub Secrets，由 GitHub Actions 在部署前自动替换。
+
+这样做的好处是：以后你同步原作者仓库更新时，`wrangler.toml` 不需要反复手动改 ID，也不会把个人配置写进公开代码。
+
+### **步骤 3：配置 GitHub Actions Secrets**
+
+项目使用 `.github/workflows/deploy.yml` 自动部署到 Cloudflare。这个文件不会保存你的真实密钥，而是从 GitHub Secrets 中读取。
+
+进入你自己的 GitHub 仓库页面，按下面步骤配置：
+
+1. 点击顶部的 **Settings**。
+2. 左侧找到 **Secrets and variables**，展开后点击 **Actions**。
+3. 点击 **New repository secret**，添加第一个密钥：
+
+   ```text
+   Name: CLOUDFLARE_KV_ID
+   Secret: 你的 Cloudflare KV Namespace ID
+   ```
+
+4. 再点击 **New repository secret**，添加第二个密钥：
+
+   ```text
+   Name: CLOUDFLARE_API_TOKEN
+   Secret: 你的 Cloudflare API Token
+   ```
+
+`CLOUDFLARE_KV_ID` 用来替换 `wrangler.toml` 里的 `${KV_ID}`。`CLOUDFLARE_API_TOKEN` 用来授权 GitHub Actions 把 Worker 部署到你的 Cloudflare 账号。
+
+Cloudflare API Token 建议使用最小权限：能编辑 Workers，并能读取账号资源。生成后只保存到 GitHub Secrets，不要写进 README、代码或聊天记录。
+
+### **步骤 4：理解 .github/workflows/deploy.yml 的作用**
+
+`.github/workflows/deploy.yml` 是 GitHub Actions 自动部署脚本。你向 `main` 分支推送代码，或者 Sync Fork 后产生新的提交时，它会自动执行。
+
+当前流程做了三件事：
+
+1. 拉取仓库代码：
+
+   ```yaml
+   - name: Checkout Code
+     uses: actions/checkout@v4
+   ```
+
+2. 部署前把 `wrangler.toml` 里的 `${KV_ID}` 替换成 GitHub Secrets 里的真实 KV ID：
+
+   ```yaml
+   - name: Replace KV ID Placeholder
+     run: sed -i 's/${KV_ID}/${{ secrets.CLOUDFLARE_KV_ID }}/g' wrangler.toml
+   ```
+
+3. 使用 Cloudflare 官方 wrangler-action 部署 Worker：
+
+   ```yaml
+   - name: Deploy to Cloudflare Workers
+     uses: cloudflare/wrangler-action@v3
+     with:
+       apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+   ```
+
+所以日常更新时，你只需要把代码推送到自己的 GitHub 仓库，GitHub Actions 会自动完成 KV ID 替换和 Worker 部署。
+
+### **步骤 5：在 Cloudflare 部署**
 
 1. 在 Cloudflare 左侧菜单点击 **Workers & Pages** \-\> **Overview**。  
 2. 点击右上角 **Create Application**，选择 **Workers** 选项卡，然后点击 **Connect to Git**。  
@@ -70,7 +136,9 @@
    * Entry point (入口点)：手动输入 **worker/worker.js**  
 5. 点击 **Save and Deploy**，等待系统部署完成（出现绿色对勾），点击 **Continue to project**。
 
-### **步骤 4：在 KV 数据库中添加 TG 密钥**
+如果你已经配置了 GitHub Actions，也可以直接向 `main` 分支 push 代码，让 `.github/workflows/deploy.yml` 自动部署。
+
+### **步骤 6：在 KV 数据库中添加 TG 密钥**
 
 由于 Cloudflare 的环境变量偶尔会有部署延迟的 Bug，我们直接将验证密钥存入 KV 数据库，100% 稳定触发：
 
@@ -81,7 +149,7 @@
    * **Key (键)** 填 TG\_BOT\_TOKEN，**Value (值)** 填你的机器人 Token。点击 **Add (添加)**。  
    * **Key (键)** 填 TG\_CHAT\_ID，**Value (值)** 填你的数字 ID。点击 **Add (添加)**。
 
-### **步骤 5：设置 Telegram 机器人 Webhook**
+### **步骤 7：设置 Telegram 机器人 Webhook**
 
 如果你只需要网页验证码和到期提醒，可以跳过这一步。如果你想在 Telegram 机器人里直接添加号码、查看列表，请继续设置 Webhook。
 
@@ -105,7 +173,7 @@
 
 4. 安全限制：机器人只处理 `TG_CHAT_ID` 对应用户发来的消息。其他人就算知道机器人，也不能添加或查看你的号码数据。
 
-### **步骤 6：开始使用！**
+### **步骤 8：开始使用！**
 
 由于密钥直接存入了数据库，配置会**立即生效，无需等待！**  
 现在访问 Cloudflare 为你分配的 Worker 域名（例如 https://esim-api.xxx.workers.dev），点击“向 TG 机器人获取验证码”，开始享受你的保号面板吧！
