@@ -35,6 +35,14 @@ function createEnv(initial = {}) {
   };
 }
 
+function todayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function startKeyboardKey(chatId = 12345) {
+  return `tg_start_keyboard_${chatId}`;
+}
+
 function captureTelegramMessages() {
   const messages = [];
   const payloads = [];
@@ -179,7 +187,7 @@ test("/skip 跳过手机号、平台和备注", async () => {
 
 test("/start 返回欢迎说明和添加流程，/help 只返回可用命令", async () => {
   const worker = await loadWorker();
-  const env = createEnv();
+  const env = createEnv({ [startKeyboardKey()]: todayString() });
   const capture = captureTelegramMessages();
 
   try {
@@ -202,7 +210,7 @@ test("/start 返回欢迎说明和添加流程，/help 只返回可用命令", a
       ],
       [
         { text: "打开网站", callback_data: "cmd:site" },
-        { text: "取消流程", callback_data: "cmd:cancel" },
+        { text: "帮助", callback_data: "cmd:help" },
       ],
     ]);
   } finally {
@@ -231,15 +239,41 @@ test("/help 按钮回调复用现有命令", async () => {
     await worker.fetch(telegramCallbackUpdate("cmd:list"), env, {});
     await worker.fetch(telegramCallbackUpdate("cmd:site"), env, {});
     await worker.fetch(telegramCallbackUpdate("cmd:add"), env, {});
+    await worker.fetch(telegramCallbackUpdate("cmd:help"), env, {});
 
     assert.match(capture.messages[0], /当前号码列表/);
     assert.match(capture.messages[0], /KnowRoaming/);
     assert.match(capture.messages[1], /https:\/\/phone\.betony\.cc\.cd/);
     assert.match(capture.messages[2], /第 1\/6 步：卡片名称/);
+    assert.match(capture.messages[3], /<b>可用命令<\/b>/);
+    assert.deepEqual(capture.payloads.at(-1).reply_markup.inline_keyboard[1][1], { text: "帮助", callback_data: "cmd:help" });
 
     const session = JSON.parse(env.ESIM_DB.store.get("tg_session_12345"));
     assert.equal(session.action, "add");
     assert.equal(session.step, "name");
+  } finally {
+    capture.restore();
+  }
+});
+
+test("授权用户每天首次交互时只显示一次底部 /start 一次性按钮", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({ esim_list: "[]" });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramUpdate("/site"), env, {});
+    await worker.fetch(telegramUpdate("/list"), env, {});
+
+    const startKeyboardPayloads = capture.payloads.filter((payload) => payload.reply_markup && payload.reply_markup.keyboard);
+    assert.equal(startKeyboardPayloads.length, 1);
+    assert.deepEqual(startKeyboardPayloads[0].reply_markup, {
+      keyboard: [[{ text: "/start" }]],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+    });
+    assert.match(startKeyboardPayloads[0].text, /今天可使用底部按钮快速发送 \/start/);
+    assert.equal(env.ESIM_DB.store.get(startKeyboardKey()), todayString());
   } finally {
     capture.restore();
   }

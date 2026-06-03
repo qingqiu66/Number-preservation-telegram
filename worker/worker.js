@@ -900,6 +900,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
 </html>`;
 
 const TG_SESSION_TTL_SECONDS = 900;
+const TG_START_KEYBOARD_TTL_SECONDS = 108000;
 const SITE_URL = "https://phone.betony.cc.cd";
 
 function jsonResponse(data, headers = {}, status = 200) {
@@ -949,6 +950,14 @@ async function saveEsims(env, esims) {
 
 function getTelegramSessionKey(chatId) {
   return `tg_session_${chatId}`;
+}
+
+function getTelegramStartKeyboardKey(chatId) {
+  return `tg_start_keyboard_${chatId}`;
+}
+
+function getTodayString() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function isValidDateString(value) {
@@ -1009,9 +1018,17 @@ function getHelpKeyboard() {
       ],
       [
         { text: "打开网站", callback_data: "cmd:site" },
-        { text: "取消流程", callback_data: "cmd:cancel" }
+        { text: "帮助", callback_data: "cmd:help" }
       ]
     ]
+  };
+}
+
+function getStartReplyKeyboard() {
+  return {
+    keyboard: [[{ text: "/start" }]],
+    resize_keyboard: true,
+    one_time_keyboard: true
   };
 }
 
@@ -1020,7 +1037,7 @@ function getTelegramCommandFromCallback(data) {
     "cmd:add": "/add",
     "cmd:list": "/list",
     "cmd:site": "/site",
-    "cmd:cancel": "/cancel"
+    "cmd:help": "/help"
   };
   return callbackCommands[data] || "";
 }
@@ -1060,6 +1077,16 @@ function formatSimSummary(data) {
 
 async function saveTelegramSession(env, chatId, session) {
   await env.ESIM_DB.put(getTelegramSessionKey(chatId), JSON.stringify(session), { expirationTtl: TG_SESSION_TTL_SECONDS });
+}
+
+async function maybeSendDailyStartKeyboard(env, tgToken, chatId) {
+  const key = getTelegramStartKeyboardKey(chatId);
+  const today = getTodayString();
+  const lastShownDate = await env.ESIM_DB.get(key);
+  if (lastShownDate === today) return;
+
+  await env.ESIM_DB.put(key, today, { expirationTtl: TG_START_KEYBOARD_TTL_SECONDS });
+  await sendTelegramMessage(tgToken, chatId, "今天可使用底部按钮快速发送 /start。按钮会在使用后自动收起。", getStartReplyKeyboard());
 }
 
 async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
@@ -1187,12 +1214,16 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
     await answerTelegramCallback(tgToken, callbackQuery.id);
   }
 
+  if (!callbackQuery) {
+    await maybeSendDailyStartKeyboard(env, tgToken, chatId);
+  }
+
   const command = text.split(/\s+/)[0].split("@")[0].toLowerCase();
   const sessionKey = getTelegramSessionKey(chatId);
   const session = await env.ESIM_DB.get(sessionKey, { type: "json" });
 
   if (command === "/start") {
-    await sendTelegramMessage(tgToken, chatId, getTelegramStartText());
+    await sendTelegramMessage(tgToken, chatId, getTelegramStartText(), getHelpKeyboard());
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
