@@ -163,83 +163,243 @@ const HTML_CONTENT = `<!DOCTYPE html>
         let countdownInterval;
         let editingId = null; 
 
-        // ================= 国旗字典配置 =================
+        // ================= 全球极其全面的 SVG 国旗字典配置 =================
+        // 涵盖亚洲、欧洲、美洲、非洲、大洋洲近 170 个国家和地区
+        // 特别支持北美 (+1) 共享区号下的长前缀精细匹配
         const countryFlags = [
-            { prefix: "+1", flag: "🇺🇸/🇨🇦" },   
-            { prefix: "+44", flag: "🇬🇧" },  
-            { prefix: "+86", flag: "🇨🇳" },  
-            { prefix: "+852", flag: "🇭🇰" }, 
-            { prefix: "+853", flag: "🇲🇴" }, 
-            { prefix: "+886", flag: "🇹🇼" }, 
-            { prefix: "+81", flag: "🇯🇵" },  
-            { prefix: "+82", flag: "🇰🇷" },  
-            { prefix: "+65", flag: "🇸🇬" },  
-            { prefix: "+60", flag: "🇲🇾" },  
-            { prefix: "+61", flag: "🇦🇺" },  
-            { prefix: "+64", flag: "🇳🇿" },  
-            { prefix: "+66", flag: "🇹🇭" },  
-            { prefix: "+62", flag: "🇮🇩" },  
-            { prefix: "+63", flag: "🇵🇭" },  
-            { prefix: "+84", flag: "🇻🇳" },  
-            { prefix: "+91", flag: "🇮🇳" },  
-            { prefix: "+971", flag: "🇦🇪" }, 
-            { prefix: "+33", flag: "🇫🇷" },  
-            { prefix: "+49", flag: "🇩🇪" },  
-            { prefix: "+39", flag: "🇮🇹" },  
-            { prefix: "+34", flag: "🇪🇸" },  
-            { prefix: "+7", flag: "🇷🇺/🇰🇿" },
-            { prefix: "+380", flag: "🇺🇦" }, 
-            { prefix: "+90", flag: "🇹🇷" },  
-            { prefix: "+55", flag: "🇧🇷" },  
-            { prefix: "+52", flag: "🇲🇽" },  
-            { prefix: "+27", flag: "🇿🇦" },  
-            { prefix: "+234", flag: "🇳🇬" }, 
-            { prefix: "+31", flag: "🇳🇱" },  
-            { prefix: "+32", flag: "🇧🇪" },  
-            { prefix: "+41", flag: "🇨🇭" },  
-            { prefix: "+43", flag: "🇦🇹" },  
-            { prefix: "+46", flag: "🇸🇪" },  
-            { prefix: "+47", flag: "🇳🇴" },  
-            { prefix: "+48", flag: "🇵🇱" },  
-            { prefix: "+45", flag: "🇩🇰" },  
-            { prefix: "+358", flag: "🇫🇮" }, 
-            { prefix: "+351", flag: "🇵🇹" }, 
-            { prefix: "+30", flag: "🇬🇷" },  
-            { prefix: "+353", flag: "🇮🇪" }, 
-            { prefix: "+966", flag: "🇸🇦" }, 
-            { prefix: "+972", flag: "🇮🇱" }, 
-            { prefix: "+92", flag: "🇵🇰" },  
-            { prefix: "+880", flag: "🇧🇩" }, 
-            { prefix: "+94", flag: "🇱🇰" },  
-            { prefix: "+20", flag: "🇪🇬" },  
-            { prefix: "+254", flag: "🇰🇪" }, 
-            { prefix: "+54", flag: "🇦🇷" },  
-            { prefix: "+56", flag: "🇨🇱" },  
-            { prefix: "+57", flag: "🇨🇴" },  
-            { prefix: "+51", flag: "🇵🇪" },  
-            { prefix: "+58", flag: "🇻🇪" },  
-            { prefix: "+370", flag: "🇱🇹" }, 
-            { prefix: "+371", flag: "🇱🇻" }, 
-            { prefix: "+372", flag: "🇪🇪" }, 
-            { prefix: "+995", flag: "🇬🇪" }, 
-            { prefix: "+374", flag: "🇦🇲" }, 
-            { prefix: "+381", flag: "🇷🇸" }, 
-            { prefix: "+359", flag: "🇧🇬" }, 
-            { prefix: "+357", flag: "🇨🇾" }  
+            // 北美及加勒比海 (NANP +1) - 长区号优先匹配
+            { prefix: "+1242", iso: ["bs"] }, // 巴哈马
+            { prefix: "+1246", iso: ["bb"] }, // 巴巴多斯
+            { prefix: "+1264", iso: ["ai"] }, // 安圭拉
+            { prefix: "+1268", iso: ["ag"] }, // 安提瓜和巴布达
+            { prefix: "+1284", iso: ["vg"] }, // 英属维尔京群岛
+            { prefix: "+1340", iso: ["vi"] }, // 美属维尔京群岛
+            { prefix: "+1345", iso: ["ky"] }, // 开曼群岛
+            { prefix: "+1441", iso: ["bm"] }, // 百慕大
+            { prefix: "+1473", iso: ["gd"] }, // 格林纳达
+            { prefix: "+1649", iso: ["tc"] }, // 特克斯和凯科斯群岛
+            { prefix: "+1664", iso: ["ms"] }, // 蒙特塞拉特
+            { prefix: "+1670", iso: ["mp"] }, // 北马里亚纳群岛
+            { prefix: "+1671", iso: ["gu"] }, // 关岛
+            { prefix: "+1684", iso: ["as"] }, // 美属萨摩亚
+            { prefix: "+1721", iso: ["sx"] }, // 荷属圣马丁
+            { prefix: "+1758", iso: ["lc"] }, // 圣卢西亚
+            { prefix: "+1767", iso: ["dm"] }, // 多米尼克
+            { prefix: "+1784", iso: ["vc"] }, // 圣文森特和格林纳丁斯
+            { prefix: "+1787", iso: ["pr"] }, // 波多黎各
+            { prefix: "+1939", iso: ["pr"] }, // 波多黎各
+            { prefix: "+1809", iso: ["do"] }, // 多米尼加共和国
+            { prefix: "+1829", iso: ["do"] }, // 多米尼加共和国
+            { prefix: "+1849", iso: ["do"] }, // 多米尼加共和国
+            { prefix: "+1868", iso: ["tt"] }, // 特立尼达和多巴哥
+            { prefix: "+1876", iso: ["jm"] }, // 牙买加
+            { prefix: "+1", iso: ["us", "ca"] }, // 美国/加拿大 默认兜底
+            
+            // 亚洲
+            { prefix: "+86", iso: ["cn"] },
+            { prefix: "+852", iso: ["hk"] },
+            { prefix: "+853", iso: ["mo"] },
+            { prefix: "+886", iso: ["tw"] },
+            { prefix: "+81", iso: ["jp"] },
+            { prefix: "+82", iso: ["kr"] },
+            { prefix: "+850", iso: ["kp"] },
+            { prefix: "+65", iso: ["sg"] },
+            { prefix: "+60", iso: ["my"] },
+            { prefix: "+62", iso: ["id"] },
+            { prefix: "+63", iso: ["ph"] },
+            { prefix: "+66", iso: ["th"] },
+            { prefix: "+84", iso: ["vn"] },
+            { prefix: "+91", iso: ["in"] },
+            { prefix: "+92", iso: ["pk"] },
+            { prefix: "+93", iso: ["af"] },
+            { prefix: "+94", iso: ["lk"] },
+            { prefix: "+95", iso: ["mm"] },
+            { prefix: "+98", iso: ["ir"] },
+            { prefix: "+971", iso: ["ae"] },
+            { prefix: "+972", iso: ["il"] },
+            { prefix: "+973", iso: ["bh"] },
+            { prefix: "+974", iso: ["qa"] },
+            { prefix: "+975", iso: ["bt"] },
+            { prefix: "+976", iso: ["mn"] },
+            { prefix: "+977", iso: ["np"] },
+            { prefix: "+960", iso: ["mv"] },
+            { prefix: "+961", iso: ["lb"] },
+            { prefix: "+962", iso: ["jo"] },
+            { prefix: "+963", iso: ["sy"] },
+            { prefix: "+964", iso: ["iq"] },
+            { prefix: "+965", iso: ["kw"] },
+            { prefix: "+966", iso: ["sa"] },
+            { prefix: "+968", iso: ["om"] },
+            { prefix: "+992", iso: ["tj"] },
+            { prefix: "+993", iso: ["tm"] },
+            { prefix: "+994", iso: ["az"] },
+            { prefix: "+995", iso: ["ge"] },
+            { prefix: "+996", iso: ["kg"] },
+            { prefix: "+998", iso: ["uz"] },
+            { prefix: "+855", iso: ["kh"] },
+            { prefix: "+856", iso: ["la"] },
+            { prefix: "+880", iso: ["bd"] },
+            { prefix: "+90", iso: ["tr"] },
+
+            // 欧洲
+            { prefix: "+44", iso: ["gb"] },
+            { prefix: "+33", iso: ["fr"] },
+            { prefix: "+49", iso: ["de"] },
+            { prefix: "+39", iso: ["it"] },
+            { prefix: "+34", iso: ["es"] },
+            { prefix: "+7", iso: ["ru", "kz"] }, // 俄罗斯/哈萨克斯坦
+            { prefix: "+380", iso: ["ua"] },
+            { prefix: "+31", iso: ["nl"] },
+            { prefix: "+32", iso: ["be"] },
+            { prefix: "+41", iso: ["ch"] },
+            { prefix: "+43", iso: ["at"] },
+            { prefix: "+46", iso: ["se"] },
+            { prefix: "+47", iso: ["no"] },
+            { prefix: "+48", iso: ["pl"] },
+            { prefix: "+45", iso: ["dk"] },
+            { prefix: "+358", iso: ["fi"] },
+            { prefix: "+351", iso: ["pt"] },
+            { prefix: "+30", iso: ["gr"] },
+            { prefix: "+353", iso: ["ie"] },
+            { prefix: "+370", iso: ["lt"] },
+            { prefix: "+371", iso: ["lv"] },
+            { prefix: "+372", iso: ["ee"] },
+            { prefix: "+374", iso: ["am"] },
+            { prefix: "+381", iso: ["rs"] },
+            { prefix: "+359", iso: ["bg"] },
+            { prefix: "+357", iso: ["cy"] },
+            { prefix: "+420", iso: ["cz"] },
+            { prefix: "+421", iso: ["sk"] },
+            { prefix: "+36", iso: ["hu"] },
+            { prefix: "+40", iso: ["ro"] },
+            { prefix: "+385", iso: ["hr"] },
+            { prefix: "+386", iso: ["si"] },
+            { prefix: "+387", iso: ["ba"] },
+            { prefix: "+389", iso: ["mk"] },
+            { prefix: "+355", iso: ["al"] },
+            { prefix: "+352", iso: ["lu"] },
+            { prefix: "+356", iso: ["mt"] },
+            { prefix: "+354", iso: ["is"] },
+            { prefix: "+376", iso: ["ad"] },
+            { prefix: "+373", iso: ["md"] },
+            { prefix: "+377", iso: ["mc"] },
+            { prefix: "+378", iso: ["sm"] },
+            { prefix: "+382", iso: ["me"] },
+            { prefix: "+423", iso: ["li"] },
+            { prefix: "+350", iso: ["gi"] },
+            { prefix: "+298", iso: ["fo"] },
+
+            // 中美洲及南美洲
+            { prefix: "+55", iso: ["br"] },
+            { prefix: "+54", iso: ["ar"] },
+            { prefix: "+56", iso: ["cl"] },
+            { prefix: "+57", iso: ["co"] },
+            { prefix: "+51", iso: ["pe"] },
+            { prefix: "+58", iso: ["ve"] },
+            { prefix: "+591", iso: ["bo"] },
+            { prefix: "+593", iso: ["ec"] },
+            { prefix: "+595", iso: ["py"] },
+            { prefix: "+598", iso: ["uy"] },
+            { prefix: "+592", iso: ["gy"] },
+            { prefix: "+597", iso: ["sr"] },
+            { prefix: "+52", iso: ["mx"] },
+            { prefix: "+501", iso: ["bz"] },
+            { prefix: "+502", iso: ["gt"] },
+            { prefix: "+503", iso: ["sv"] },
+            { prefix: "+504", iso: ["hn"] },
+            { prefix: "+505", iso: ["ni"] },
+            { prefix: "+506", iso: ["cr"] },
+            { prefix: "+507", iso: ["pa"] },
+
+            // 大洋洲
+            { prefix: "+61", iso: ["au"] },
+            { prefix: "+64", iso: ["nz"] },
+            { prefix: "+679", iso: ["fj"] },
+            { prefix: "+675", iso: ["pg"] },
+            { prefix: "+678", iso: ["vu"] },
+            { prefix: "+677", iso: ["sb"] },
+            { prefix: "+676", iso: ["to"] },
+            { prefix: "+685", iso: ["ws"] },
+            { prefix: "+686", iso: ["ki"] },
+            { prefix: "+688", iso: ["tv"] },
+            { prefix: "+674", iso: ["nr"] },
+            { prefix: "+680", iso: ["pw"] },
+            { prefix: "+692", iso: ["mh"] },
+            { prefix: "+691", iso: ["fm"] },
+            { prefix: "+687", iso: ["nc"] },
+            { prefix: "+689", iso: ["pf"] },
+
+            // 非洲
+            { prefix: "+27", iso: ["za"] },
+            { prefix: "+234", iso: ["ng"] },
+            { prefix: "+20", iso: ["eg"] },
+            { prefix: "+254", iso: ["ke"] },
+            { prefix: "+212", iso: ["ma"] },
+            { prefix: "+213", iso: ["dz"] },
+            { prefix: "+216", iso: ["tn"] },
+            { prefix: "+218", iso: ["ly"] },
+            { prefix: "+249", iso: ["sd"] },
+            { prefix: "+251", iso: ["et"] },
+            { prefix: "+255", iso: ["tz"] },
+            { prefix: "+256", iso: ["ug"] },
+            { prefix: "+233", iso: ["gh"] },
+            { prefix: "+225", iso: ["ci"] },
+            { prefix: "+237", iso: ["cm"] },
+            { prefix: "+221", iso: ["sn"] },
+            { prefix: "+223", iso: ["ml"] },
+            { prefix: "+224", iso: ["gn"] },
+            { prefix: "+228", iso: ["tg"] },
+            { prefix: "+229", iso: ["bj"] },
+            { prefix: "+227", iso: ["ne"] },
+            { prefix: "+226", iso: ["bf"] },
+            { prefix: "+231", iso: ["lr"] },
+            { prefix: "+232", iso: ["sl"] },
+            { prefix: "+220", iso: ["gm"] },
+            { prefix: "+245", iso: ["gw"] },
+            { prefix: "+238", iso: ["cv"] },
+            { prefix: "+239", iso: ["st"] },
+            { prefix: "+240", iso: ["gq"] },
+            { prefix: "+241", iso: ["ga"] },
+            { prefix: "+242", iso: ["cg"] },
+            { prefix: "+243", iso: ["cd"] },
+            { prefix: "+244", iso: ["ao"] },
+            { prefix: "+260", iso: ["zm"] },
+            { prefix: "+263", iso: ["zw"] },
+            { prefix: "+264", iso: ["na"] },
+            { prefix: "+267", iso: ["bw"] },
+            { prefix: "+268", iso: ["sz"] },
+            { prefix: "+266", iso: ["ls"] },
+            { prefix: "+261", iso: ["mg"] },
+            { prefix: "+230", iso: ["mu"] },
+            { prefix: "+248", iso: ["sc"] },
+            { prefix: "+262", iso: ["re"] },
+            { prefix: "+253", iso: ["dj"] },
+            { prefix: "+252", iso: ["so"] },
+            { prefix: "+250", iso: ["rw"] },
+            { prefix: "+257", iso: ["bi"] },
+            { prefix: "+258", iso: ["mz"] },
+            { prefix: "+265", iso: ["mw"] }
         ];
 
         function getCountryFlag(numberStr) {
-            if (!numberStr) return "📞"; 
+            // 默认兜底图标（使用 FontAwesome，完美跨平台）
+            const defaultIcon = '<i class="fa-solid fa-globe text-blue-400 text-lg"></i>';
+            if (!numberStr) return defaultIcon; 
             const cleanNumber = numberStr.replace(/[\\s\\-\\(\\)\\.]/g, '');
-            if (!cleanNumber.startsWith("+")) return "🌍"; 
+            if (!cleanNumber.startsWith("+")) return defaultIcon; 
             
+            // 核心逻辑：按 prefix 长度降序排序。
+            // 这样 "+1242" 会在 "+1" 之前被匹配到，实现北美长区号的精准识别。
             const sortedFlags = countryFlags.sort((a, b) => b.prefix.length - a.prefix.length);
             for (let item of sortedFlags) {
                 if (cleanNumber.startsWith(item.prefix)) {
-                    return item.flag;
+                    // 使用 FlagCDN 生成 SVG 高清图片，多国籍用 "/" 分隔
+                    return item.iso.map(code => 
+                        \`<img src="https://flagcdn.com/\${code}.svg" class="inline-block w-[22px] h-auto rounded-[2px] shadow-[0_0_2px_rgba(0,0,0,0.2)]" alt="\${code}" title="国家/地区代码：\${item.prefix}">\`
+                    ).join('<span class="mx-0.5 text-gray-300 text-xs">/</span>');
                 }
             }
-            return "🌍"; 
+            return defaultIcon; 
         }
 
         document.getElementById('current-date').innerText = new Date().toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
@@ -415,7 +575,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 }
 
                 let percent = Math.min(Math.max((diffDays / 365) * 100, 0), 100);
-                const flagEmoji = getCountryFlag(sim.number);
+                const flagHTML = getCountryFlag(sim.number);
                 
                 // 渲染备注区域
                 const remarkHTML = sim.remark ? \`<div class="bg-blue-50/60 rounded-lg p-2.5 mb-3 text-xs text-gray-700 border border-blue-100/60 break-words leading-relaxed"><i class="fa-regular fa-comment-dots mr-1.5 text-blue-400"></i>\${sim.remark}</div>\` : '';
@@ -453,8 +613,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
                         </div>
                         
                         <div class="flex justify-between items-center mb-4 gap-2">
-                            <p class="text-gray-600 font-mono text-sm flex items-center gap-1.5 truncate">
-                                <span class="text-lg">\${flagEmoji}</span>
+                            <p class="text-gray-600 font-mono text-sm flex items-center gap-2 truncate">
+                                <span class="flex items-center shrink-0">\${flagHTML}</span>
                                 <span class="truncate">\${sim.number || '未登记号码'}</span>
                             </p>
                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold shadow-sm whitespace-nowrap flex-shrink-0 \${badgeClass}">
