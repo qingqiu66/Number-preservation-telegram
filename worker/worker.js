@@ -900,6 +900,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
 </html>`;
 
 const TG_SESSION_TTL_SECONDS = 900;
+const SITE_URL = "https://phone.betony.cc.cd";
 
 function jsonResponse(data, headers = {}, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -944,38 +945,48 @@ function isValidDateString(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+function getTelegramStartText() {
+  return `🤖 <b>欢迎使用 eSIM 保号机器人</b>
+
+我可以帮你查看号码列表、逐步添加新号码，也可以显示网页看板地址。
+
+发送 /help 查看可用命令。`;
+}
+
 function getTelegramHelpText() {
-  return `🤖 <b>eSIM 保号机器人使用说明</b>
+  return `🤖 <b>可用命令</b>
 
-<b>可用命令</b>
 /start - 查看欢迎说明
-/help - 查看完整使用说明
+/help - 查看可用命令
 /list - 查看当前号码列表
-/add - 逐步添加一个新号码
-/cancel - 取消当前未完成的添加流程
+/add - 按步骤添加一个新号码
+/skip - 跳过当前选填字段
+/site - 显示网站访问链接
+/cancel - 取消当前未完成流程`;
+}
 
-<b>添加号码流程</b>
-发送 /add 后，我会按 6 步询问：
-1/6 卡片名称：必填，例如 KnowRoaming
-2/6 手机号：选填，例如 +1 234 567 8900；输入 - 可跳过
-3/6 保号周期：必填，输入大于 0 的整数，例如 180
-4/6 到期日：必填，格式 YYYY-MM-DD，例如 2026-12-31
-5/6 已注册平台：选填，例如 Telegram Google OpenAI；输入 - 可跳过
-6/6 备注/保号要求：选填，例如 半年发一次短信；输入 - 可跳过
+function getSiteText() {
+  return `🌐 <b>eSIM 保号看板地址</b>
 
-最后我会发送汇总。回复 确认 保存，回复 取消 或 /cancel 放弃。`;
+${SITE_URL}
+
+你可以在网页端查看、编辑、续期号码。`;
 }
 
 function getAddStepPrompt(step) {
   const prompts = {
-    name: "📝 <b>第 1/6 步：卡片名称</b>\n\n请输入卡片名称，不能为空。\n示例：KnowRoaming\n\n如需取消，请发送 /cancel。",
-    number: "📞 <b>第 2/6 步：手机号</b>\n\n请输入手机号，建议带国际区号。\n示例：+1 234 567 8900\n\n如果不想填写，请输入 - 跳过。",
-    cycle: "🔄 <b>第 3/6 步：保号周期</b>\n\n请输入保号周期天数，必须是大于 0 的整数。\n示例：180\n\n如需取消，请发送 /cancel。",
-    expireDate: "📅 <b>第 4/6 步：到期日</b>\n\n请输入本次到期日，格式必须是 YYYY-MM-DD。\n示例：2026-12-31\n\n如需取消，请发送 /cancel。",
-    platforms: "🌐 <b>第 5/6 步：已注册平台</b>\n\n请输入这个号码已绑定的平台，可用空格或逗号分隔。\n示例：Telegram Google OpenAI\n\n如果不想填写，请输入 - 跳过。",
-    remark: "📝 <b>第 6/6 步：备注/保号要求</b>\n\n请输入备注或保号要求。\n示例：半年发一次短信\n\n如果不想填写，请输入 - 跳过。"
+    name: "📝 <b>第 1/6 步：卡片名称</b>\n\n请输入卡片名称，不能为空。\n\n示例：\nKnowRoaming\n\n如需取消，请发送 /cancel。",
+    number: "📞 <b>第 2/6 步：手机号</b>\n\n请输入手机号，建议带国际区号。\n\n示例：\n+1 234 567 8900\n\n如果不想填写，请发送 /skip 跳过。\n\n如需取消，请发送 /cancel。",
+    cycle: "🔄 <b>第 3/6 步：保号周期</b>\n\n请输入保号周期天数，必须是大于 0 的整数。\n\n示例：\n180\n\n如需取消，请发送 /cancel。",
+    expireDate: "📅 <b>第 4/6 步：到期日</b>\n\n请输入本次到期日，格式必须是 YYYY-MM-DD。\n\n示例：\n2026-12-31\n\n如需取消，请发送 /cancel。",
+    platforms: "🌐 <b>第 5/6 步：已注册平台</b>\n\n请输入这个号码已绑定的平台，可用空格或逗号分隔。\n\n示例：\nTelegram Google OpenAI\n\n如果不想填写，请发送 /skip 跳过。\n\n如需取消，请发送 /cancel。",
+    remark: "📝 <b>第 6/6 步：备注/保号要求</b>\n\n请输入备注或保号要求。\n\n示例：\n半年发一次短信\n\n如果不想填写，请发送 /skip 跳过。\n\n如需取消，请发送 /cancel。"
   };
   return prompts[step];
+}
+
+function isSkipCommand(value) {
+  return value.toLowerCase() === "/skip";
 }
 
 function formatSimSummary(data) {
@@ -1015,7 +1026,7 @@ async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
   }
 
   if (session.step === "number") {
-    session.data.number = value === "-" ? "" : value;
+    session.data.number = isSkipCommand(value) ? "" : value;
     session.step = "cycle";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
@@ -1051,7 +1062,7 @@ async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
   }
 
   if (session.step === "platforms") {
-    session.data.platforms = value === "-" ? "" : value;
+    session.data.platforms = isSkipCommand(value) ? "" : value;
     session.step = "remark";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
@@ -1060,7 +1071,7 @@ async function handleTelegramAddStep(env, tgToken, chatId, text, session) {
   }
 
   if (session.step === "remark") {
-    session.data.remark = value === "-" ? "" : value;
+    session.data.remark = isSkipCommand(value) ? "" : value;
     session.step = "confirm";
     session.updatedAt = Date.now();
     await saveTelegramSession(env, chatId, session);
@@ -1114,8 +1125,18 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
   const sessionKey = getTelegramSessionKey(chatId);
   const session = await env.ESIM_DB.get(sessionKey, { type: "json" });
 
-  if (command === "/start" || command === "/help") {
+  if (command === "/start") {
+    await sendTelegramMessage(tgToken, chatId, getTelegramStartText());
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (command === "/help") {
     await sendTelegramMessage(tgToken, chatId, getTelegramHelpText());
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (command === "/site") {
+    await sendTelegramMessage(tgToken, chatId, getSiteText());
     return jsonResponse({ ok: true }, corsHeaders);
   }
 

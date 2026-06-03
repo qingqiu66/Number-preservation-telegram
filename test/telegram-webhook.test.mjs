@@ -35,6 +35,21 @@ function createEnv(initial = {}) {
   };
 }
 
+function captureTelegramMessages() {
+  const messages = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    messages.push(JSON.parse(init.body).text);
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+  return {
+    messages,
+    restore() {
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
 function telegramUpdate(text, chatId = 12345) {
   return new Request("https://example.test/api/telegram/webhook", {
     method: "POST",
@@ -104,6 +119,72 @@ test("/add 完整流程保存记录到 esim_list", async () => {
     assert.equal(env.ESIM_DB.store.has("tg_session_12345"), false);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("/skip 跳过手机号、平台和备注", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({ esim_list: "[]" });
+  const capture = captureTelegramMessages();
+
+  try {
+    for (const text of [
+      "/add",
+      "KnowRoaming",
+      "/skip",
+      "180",
+      "2026-12-31",
+      "/skip",
+      "/skip",
+      "确认",
+    ]) {
+      const response = await worker.fetch(telegramUpdate(text), env, {});
+      assert.equal(response.status, 200);
+    }
+
+    const esims = JSON.parse(env.ESIM_DB.store.get("esim_list"));
+    assert.equal(esims.length, 1);
+    assert.equal(esims[0].number, "");
+    assert.equal(esims[0].platforms, "");
+    assert.equal(esims[0].remark, "");
+    assert.match(capture.messages.join("\n"), /发送 \/skip 跳过/);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/start 返回欢迎说明，/help 只返回可用命令", async () => {
+  const worker = await loadWorker();
+  const env = createEnv();
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramUpdate("/start"), env, {});
+    await worker.fetch(telegramUpdate("/help"), env, {});
+
+    assert.match(capture.messages[0], /欢迎使用/);
+    assert.match(capture.messages[0], /发送 \/help 查看可用命令/);
+    assert.doesNotMatch(capture.messages[0], /可用命令[\s\S]*\/list/);
+    assert.match(capture.messages[1], /<b>可用命令<\/b>/);
+    assert.match(capture.messages[1], /\/site - 显示网站访问链接/);
+    assert.doesNotMatch(capture.messages[1], /添加号码流程/);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/site 返回网站访问链接", async () => {
+  const worker = await loadWorker();
+  const env = createEnv();
+  const capture = captureTelegramMessages();
+
+  try {
+    const response = await worker.fetch(telegramUpdate("/site"), env, {});
+
+    assert.equal(response.status, 200);
+    assert.match(capture.messages.at(-1), /https:\/\/phone\.betony\.cc\.cd/);
+  } finally {
+    capture.restore();
   }
 });
 
