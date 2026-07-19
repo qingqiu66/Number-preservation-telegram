@@ -1,6 +1,6 @@
 name: Deploy Worker
 
-# 触发条件：当你向 main 分支推送代码（或 Sync Fork）时触发
+# 触发条件：当向 main 分支推送代码 (或 Sync Fork) 时触发
 on:
   push:
     branches:
@@ -10,27 +10,28 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. 核心步骤：拉取你的代码到虚拟机上
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    # 1. 核心步骤：拉取代码到虚拟机上
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      # 2. 魔法步骤：在部署前，把 wrangler.toml 里的 ${KV_ID} 替换成你在 Settings 里存的真实 ID
-      - name: Replace KV ID Placeholder
-        run: sed -i 's/${KV_ID}/${{ secrets.CLOUDFLARE_KV_ID }}/g' wrangler.toml
+    # 2. 魔法步骤：在部署前，把 wrangler.toml 里的 ${KV_ID} 替换成你在 Settings 里的真实 ID
+    # 注意这里修改了正则语法：在 $ 前面加了反斜杠 \，使其能正确匹配
+    - name: Replace KV ID Placeholder
+      run: sed -i 's/\${KV_ID}/${{ secrets.CLOUDFLARE_KV_ID }}/g' wrangler.toml
 
-      # 3. 部署步骤：使用 Cloudflare 官方动作把代码发给 CF
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    # 3. 部署步骤：使用 Cloudflare 官方动作把代码发给 CF
+    - name: Deploy to Cloudflare Workers
+      uses: cloudflare/wrangler-action@v3
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
-      # 4. Webhook 步骤：部署后自动把 Telegram 机器人回调地址指向当前 Worker
-      - name: Set Telegram Webhook
-        env:
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          WORKER_URL: ${{ vars.WORKER_URL }}
-        run: |
-          WEBHOOK_URL="${WORKER_URL%/}/api/telegram/webhook"
-          curl --fail --show-error --silent --request POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/setWebhook" \
-            --data-urlencode "url=${WEBHOOK_URL}"
-          echo "Telegram webhook set to ${WEBHOOK_URL}"
+    # 4. Webhook 步骤：部署后自动把 Telegram 机器人回调地址指向当前 Worker
+    - name: Set Telegram Webhook
+      env:
+        TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        WORKER_URL: ${{ vars.WORKER_URL }}
+      run: |
+        WEBHOOK_URL="${WORKER_URL%/}/api/telegram/webhook"
+        curl --fail --show-error --silent --request POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/setWebhook" \
+          --data-urlencode "url=${WEBHOOK_URL}"
+        echo "Telegram webhook set to ${WEBHOOK_URL}"
